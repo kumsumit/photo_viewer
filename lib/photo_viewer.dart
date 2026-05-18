@@ -4,6 +4,23 @@ import 'dart:io';
 import 'package:cached_network_image_ce/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+typedef PhotoViewerPlaceholderBuilder =
+    Widget Function(
+      BuildContext context,
+      String url,
+    );
+
+typedef PhotoViewerUrlErrorBuilder =
+    Widget Function(
+      BuildContext context,
+      String url,
+      Object error,
+    );
+
+typedef PhotoViewerPageJump = void Function(int page);
+
+typedef PhotoViewerPageJumpProvider = void Function(PhotoViewerPageJump jump);
+
 bool _isNetworkUrl(String url) {
   return url.startsWith('http://') || url.startsWith('https://');
 }
@@ -36,9 +53,16 @@ Widget _buildImageFromUrl(
   BoxFit fit = BoxFit.cover,
   double? width,
   double? height,
-  Widget Function(BuildContext, String)? placeholder,
-  Widget Function(BuildContext, String, dynamic)? errorWidget,
+  PhotoViewerPlaceholderBuilder? placeholder,
+  ImageErrorWidgetBuilder? errorBuilder,
+  PhotoViewerUrlErrorBuilder? errorWidget,
 }) {
+  final effectiveErrorBuilder =
+      errorBuilder ??
+      (errorWidget != null
+          ? (context, error, stackTrace) => errorWidget(context, url, error)
+          : null);
+
   if (_isNetworkUrl(url)) {
     return CachedNetworkImage(
       imageUrl: url,
@@ -50,10 +74,10 @@ Widget _buildImageFromUrl(
       placeholder:
           placeholder ??
           (context, url) => const Center(child: CircularProgressIndicator()),
-      errorBuilder: errorWidget != null
-          ? (context, error, stackTrace) => errorWidget(context, url, error)
-          : (context, error, stackTrace) =>
-                const Icon(Icons.error, color: Colors.grey),
+      errorBuilder:
+          effectiveErrorBuilder ??
+          (context, error, stackTrace) =>
+              const Icon(Icons.error, color: Colors.grey),
     );
   } else if (_isPathUrl(url)) {
     return Image.file(
@@ -62,6 +86,7 @@ Widget _buildImageFromUrl(
       width: width,
       height: height,
       gaplessPlayback: true,
+      errorBuilder: effectiveErrorBuilder,
     );
   } else {
     return Image.asset(
@@ -70,6 +95,7 @@ Widget _buildImageFromUrl(
       width: width,
       height: height,
       gaplessPlayback: true,
+      errorBuilder: effectiveErrorBuilder,
     );
   }
 }
@@ -346,11 +372,17 @@ class PhotoViewerImage extends StatelessWidget {
     this.showDefaultCloseButton = true,
     this.fit = BoxFit.cover,
     this.placeholder,
+    this.errorBuilder,
     this.errorWidget,
     this.onLongPress,
     this.onDoubleTap,
     super.key,
-  });
+  }) : assert(minScale == null || minScale > 0, 'minScale must be positive'),
+       assert(maxScale == null || maxScale > 0, 'maxScale must be positive'),
+       assert(
+         minScale == null || maxScale == null || minScale <= maxScale,
+         'minScale must be less than or equal to maxScale',
+       );
 
   final String imageUrl;
   final WidgetBuilder? overlayBuilder;
@@ -359,8 +391,11 @@ class PhotoViewerImage extends StatelessWidget {
   final double borderRadius;
   final bool showDefaultCloseButton;
   final BoxFit fit;
-  final Widget Function(BuildContext, String)? placeholder;
-  final Widget Function(BuildContext, String, dynamic)? errorWidget;
+  final PhotoViewerPlaceholderBuilder? placeholder;
+  final ImageErrorWidgetBuilder? errorBuilder;
+
+  /// Prefer [errorBuilder] for new code.
+  final PhotoViewerUrlErrorBuilder? errorWidget;
 
   final VoidCallback? onLongPress;
   final VoidCallback? onDoubleTap;
@@ -378,6 +413,7 @@ class PhotoViewerImage extends StatelessWidget {
       showDefaultCloseButton: showDefaultCloseButton,
       fit: fit,
       placeholder: placeholder,
+      errorBuilder: errorBuilder,
       errorWidget: errorWidget,
       onLongPress: onLongPress,
       onDoubleTap: onDoubleTap,
@@ -400,11 +436,23 @@ class PhotoViewerMultipleImage extends StatelessWidget {
     this.onJumpToPage,
     this.fit = BoxFit.cover,
     this.placeholder,
+    this.errorBuilder,
     this.errorWidget,
     this.onLongPress,
     this.onDoubleTap,
     super.key,
-  });
+  }) : assert(imageUrls.length > 0, 'imageUrls must not be empty'),
+       assert(index >= 0, 'index must not be negative'),
+       assert(
+         index < imageUrls.length,
+         'index must be within the imageUrls range',
+       ),
+       assert(minScale == null || minScale > 0, 'minScale must be positive'),
+       assert(maxScale == null || maxScale > 0, 'maxScale must be positive'),
+       assert(
+         minScale == null || maxScale == null || minScale <= maxScale,
+         'minScale must be less than or equal to maxScale',
+       );
 
   final List<String> imageUrls;
   final int index;
@@ -415,10 +463,13 @@ class PhotoViewerMultipleImage extends StatelessWidget {
   final double borderRadius;
   final bool showDefaultCloseButton;
   final ValueChanged<int>? onPageChanged;
-  final void Function(void Function(int page) jump)? onJumpToPage;
+  final PhotoViewerPageJumpProvider? onJumpToPage;
   final BoxFit fit;
-  final Widget Function(BuildContext, String)? placeholder;
-  final Widget Function(BuildContext, String, dynamic)? errorWidget;
+  final PhotoViewerPlaceholderBuilder? placeholder;
+  final ImageErrorWidgetBuilder? errorBuilder;
+
+  /// Prefer [errorBuilder] for new code.
+  final PhotoViewerUrlErrorBuilder? errorWidget;
 
   final VoidCallback? onLongPress;
 
@@ -438,6 +489,7 @@ class PhotoViewerMultipleImage extends StatelessWidget {
               url,
               fit: fit,
               placeholder: placeholder,
+              errorBuilder: errorBuilder,
               errorWidget: errorWidget,
             );
           }).toList(),
@@ -459,6 +511,7 @@ class PhotoViewerMultipleImage extends StatelessWidget {
         imageUrls[index],
         fit: fit,
         placeholder: placeholder,
+        errorBuilder: errorBuilder,
         errorWidget: errorWidget,
       ),
     );
@@ -489,9 +542,24 @@ class PhotoViewerScreen extends StatefulWidget {
     this.enableVerticalDismiss = true,
     this.fit = BoxFit.cover,
     this.placeholder,
+    this.errorBuilder,
     this.errorWidget,
     super.key,
-  });
+  }) : assert(
+         builder != null || (builders != null && builders.length > 0),
+         'Provide either builder or a non-empty builders list',
+       ),
+       assert(initialPage >= 0, 'initialPage must not be negative'),
+       assert(
+         builders == null || initialPage < builders.length,
+         'initialPage must be within the builders range',
+       ),
+       assert(minScale > 0, 'minScale must be positive'),
+       assert(maxScale > 0, 'maxScale must be positive'),
+       assert(
+         minScale <= maxScale,
+         'minScale must be less than or equal to maxScale',
+       );
 
   /// Single-photo builder (if multiple are not provided).
   final WidgetBuilder? builder;
@@ -506,11 +574,14 @@ class PhotoViewerScreen extends StatefulWidget {
   final int initialPage;
   final bool showDefaultCloseButton;
   final ValueChanged<int>? onPageChanged;
-  final void Function(void Function(int page) jump)? onJumpToPage;
+  final PhotoViewerPageJumpProvider? onJumpToPage;
   final bool enableVerticalDismiss;
   final BoxFit fit;
-  final Widget Function(BuildContext, String)? placeholder;
-  final Widget Function(BuildContext, String, dynamic)? errorWidget;
+  final PhotoViewerPlaceholderBuilder? placeholder;
+  final ImageErrorWidgetBuilder? errorBuilder;
+
+  /// Prefer [errorBuilder] for new code.
+  final PhotoViewerUrlErrorBuilder? errorWidget;
 
   @override
   PhotoViewerScreenState createState() => PhotoViewerScreenState();
@@ -685,6 +756,7 @@ class PhotoViewerScreenState extends State<PhotoViewerScreen>
       },
       fit: widget.fit,
       placeholder: widget.placeholder,
+      errorBuilder: widget.errorBuilder,
       errorWidget: widget.errorWidget,
     );
 
@@ -708,10 +780,16 @@ class InteractivePhotoPage extends StatefulWidget {
     required this.useHero,
     this.fit = BoxFit.cover,
     this.placeholder,
+    this.errorBuilder,
     this.errorWidget,
     this.onScaleChanged,
     super.key,
-  });
+  }) : assert(minScale > 0, 'minScale must be positive'),
+       assert(maxScale > 0, 'maxScale must be positive'),
+       assert(
+         minScale <= maxScale,
+         'minScale must be less than or equal to maxScale',
+       );
 
   final TransformationController transformationController;
   final AnimationController animationController;
@@ -725,8 +803,11 @@ class InteractivePhotoPage extends StatefulWidget {
   final String heroTag;
   final bool useHero;
   final BoxFit fit;
-  final Widget Function(BuildContext, String)? placeholder;
-  final Widget Function(BuildContext, String, dynamic)? errorWidget;
+  final PhotoViewerPlaceholderBuilder? placeholder;
+  final ImageErrorWidgetBuilder? errorBuilder;
+
+  /// Prefer [errorBuilder] for new code.
+  final PhotoViewerUrlErrorBuilder? errorWidget;
 
   @override
   State<InteractivePhotoPage> createState() => _InteractivePhotoPageState();
@@ -739,6 +820,12 @@ class _InteractivePhotoPageState extends State<InteractivePhotoPage> {
   bool isDismissed = false;
   bool isZoomed = false;
   int _pointerCount = 0;
+
+  void _decrementPointerCount() {
+    if (_pointerCount > 0) {
+      _pointerCount--;
+    }
+  }
 
   @override
   void initState() {
@@ -824,7 +911,7 @@ class _InteractivePhotoPageState extends State<InteractivePhotoPage> {
     return Listener(
       onPointerUp: (_) {
         changeVisibility();
-        _pointerCount--;
+        _decrementPointerCount();
       },
       onPointerDown: (_) {
         _pointerCount++;
@@ -833,7 +920,7 @@ class _InteractivePhotoPageState extends State<InteractivePhotoPage> {
         }
       },
       onPointerCancel: (_) {
-        _pointerCount--;
+        _decrementPointerCount();
       },
       child: GestureDetector(
         onDoubleTap: doubleTap,
@@ -866,11 +953,6 @@ class _InteractivePhotoPageState extends State<InteractivePhotoPage> {
       ),
     );
   }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }
 
 /// Displays a photo viewer on top of the current screen.
@@ -887,11 +969,28 @@ Future<void> showPhotoViewer({
   bool showDefaultCloseButton = true,
   bool enableVerticalDismiss = true,
   ValueChanged<int>? onPageChanged,
-  void Function(void Function(int page) jump)? onJumpToPage,
+  PhotoViewerPageJumpProvider? onJumpToPage,
   BoxFit fit = BoxFit.cover,
-  Widget Function(BuildContext, String)? placeholder,
-  Widget Function(BuildContext, String, dynamic)? errorWidget,
+  PhotoViewerPlaceholderBuilder? placeholder,
+  ImageErrorWidgetBuilder? errorBuilder,
+  PhotoViewerUrlErrorBuilder? errorWidget,
 }) {
+  assert(
+    builder != null || (builders != null && builders.isNotEmpty),
+    'Provide either builder or a non-empty builders list',
+  );
+  assert(initialPage >= 0, 'initialPage must not be negative');
+  assert(
+    builders == null || initialPage < builders.length,
+    'initialPage must be within the builders range',
+  );
+  assert(minScale == null || minScale > 0, 'minScale must be positive');
+  assert(maxScale == null || maxScale > 0, 'maxScale must be positive');
+  assert(
+    minScale == null || maxScale == null || minScale <= maxScale,
+    'minScale must be less than or equal to maxScale',
+  );
+
   return Navigator.of(context, rootNavigator: true).push(
     TransparentPageRoute<dynamic>(
       builder: (ctx) {
@@ -909,6 +1008,7 @@ Future<void> showPhotoViewer({
           onJumpToPage: onJumpToPage,
           fit: fit,
           placeholder: placeholder,
+          errorBuilder: errorBuilder,
           errorWidget: errorWidget,
         );
       },

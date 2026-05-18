@@ -4,7 +4,7 @@
 
 [![pub package](https://img.shields.io/pub/v/photo_viewer.svg)](https://pub.dev/packages/photo_viewer)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/kumamotone/photo_viewer/blob/main/LICENSE)
-[![Flutter](https://img.shields.io/badge/Flutter-%E2%89%A51.17.0-02569B?logo=flutter)](https://flutter.dev)
+[![Flutter](https://img.shields.io/badge/Flutter-%E2%89%A53.41.0-02569B?logo=flutter)](https://flutter.dev)
 
 A lightweight Flutter library for displaying and interacting with images. Supports pinch-to-zoom, double-tap zoom, swipe-to-dismiss, multi-image pagination, and custom overlays — with minimal setup.
 
@@ -146,6 +146,7 @@ This is useful for cases like a manga/book reader where you need fine-grained co
 | `enableVerticalDismiss` | `bool` | `true` | Enable/disable swipe to dismiss |
 | `fit` | `BoxFit` | `BoxFit.cover` | Image fit mode |
 | `overlayBuilder` | `WidgetBuilder?` | `null` | Custom overlay widget |
+| `errorBuilder` | `ImageErrorWidgetBuilder?` | `null` | Custom image loading error UI |
 | `onPageChanged` | `ValueChanged<int>?` | `null` | Page change callback |
 | `onJumpToPage` | `Function?` | `null` | Provides a function to jump to a specific page |
 
