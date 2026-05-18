@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cached_network_image_ce/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 bool _isNetworkUrl(String url) {
@@ -45,10 +45,15 @@ Widget _buildImageFromUrl(
       fit: fit,
       width: width,
       height: height,
-      placeholder: placeholder ??
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder:
+          placeholder ??
           (context, url) => const Center(child: CircularProgressIndicator()),
-      errorWidget: errorWidget ??
-          (context, url, error) => const Icon(Icons.error, color: Colors.grey),
+      errorBuilder: errorWidget != null
+          ? (context, error, stackTrace) => errorWidget(context, url, error)
+          : (context, error, stackTrace) =>
+                const Icon(Icons.error, color: Colors.grey),
     );
   } else if (_isPathUrl(url)) {
     return Image.file(
@@ -56,6 +61,7 @@ Widget _buildImageFromUrl(
       fit: fit,
       width: width,
       height: height,
+      gaplessPlayback: true,
     );
   } else {
     return Image.asset(
@@ -63,6 +69,7 @@ Widget _buildImageFromUrl(
       fit: fit,
       width: width,
       height: height,
+      gaplessPlayback: true,
     );
   }
 }
@@ -223,7 +230,7 @@ class VerticalSwipeDismissibleState extends State<VerticalSwipeDismissible>
       if (animateController.value > widget.dismissThreshold) {
         widget.onDismissed?.call();
       } else {
-        animateController.reverse();
+        unawaited(animateController.reverse());
       }
     }
   }
@@ -300,15 +307,16 @@ class PhotoViewerCloseButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, -0.4),
-          end: Offset.zero,
-        ).animate(
-          CurvedAnimation(
-            parent: closeButtonVisibilityController,
-            curve: Curves.easeOut,
-          ),
-        ),
+        position:
+            Tween<Offset>(
+              begin: const Offset(0, -0.4),
+              end: Offset.zero,
+            ).animate(
+              CurvedAnimation(
+                parent: closeButtonVisibilityController,
+                curve: Curves.easeOut,
+              ),
+            ),
         child: FadeTransition(
           opacity: closeButtonVisibilityController,
           child: Material(
@@ -422,24 +430,26 @@ class PhotoViewerMultipleImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     void defaultOnTap() {
-      showPhotoViewer(
-        context: context,
-        builders: imageUrls.map<WidgetBuilder>((url) {
-          return (BuildContext context) => _buildImageFromUrl(
-                url,
-                fit: fit,
-                placeholder: placeholder,
-                errorWidget: errorWidget,
-              );
-        }).toList(),
-        heroTagBuilder: _heroTag,
-        initialPage: index,
-        overlayBuilder: overlayBuilder,
-        minScale: minScale,
-        maxScale: maxScale,
-        showDefaultCloseButton: showDefaultCloseButton,
-        onPageChanged: onPageChanged,
-        onJumpToPage: onJumpToPage,
+      unawaited(
+        showPhotoViewer(
+          context: context,
+          builders: imageUrls.map<WidgetBuilder>((url) {
+            return (BuildContext context) => _buildImageFromUrl(
+              url,
+              fit: fit,
+              placeholder: placeholder,
+              errorWidget: errorWidget,
+            );
+          }).toList(),
+          heroTagBuilder: _heroTag,
+          initialPage: index,
+          overlayBuilder: overlayBuilder,
+          minScale: minScale,
+          maxScale: maxScale,
+          showDefaultCloseButton: showDefaultCloseButton,
+          onPageChanged: onPageChanged,
+          onJumpToPage: onJumpToPage,
+        ),
       );
     }
 
@@ -578,10 +588,12 @@ class PhotoViewerScreenState extends State<PhotoViewerScreen>
 
   void jumpToPage(int page) {
     if (page >= 0 && page < effectiveBuilders.length) {
-      pageController.animateToPage(
-        page,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
+      unawaited(
+        pageController.animateToPage(
+          page,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        ),
       );
     }
   }
@@ -634,7 +646,8 @@ class PhotoViewerScreenState extends State<PhotoViewerScreen>
             ).animate(controlsVisibilityController),
             child: FadeTransition(
               opacity: controlsVisibilityController,
-              child: widget.overlayBuilder?.call(context) ??
+              child:
+                  widget.overlayBuilder?.call(context) ??
                   const SizedBox.shrink(),
             ),
           ),
@@ -743,7 +756,7 @@ class _InteractivePhotoPageState extends State<InteractivePhotoPage> {
     isZoomed = zoomed;
 
     if (!zoomed) {
-      widget.controlsVisibilityController.forward();
+      unawaited(widget.controlsVisibilityController.forward());
       if (!isDismissEnabled) {
         setState(() {
           isDismissEnabled = true;
@@ -761,9 +774,9 @@ class _InteractivePhotoPageState extends State<InteractivePhotoPage> {
   void changeVisibility() {
     if (widget.controlsVisibilityController.status ==
         AnimationStatus.completed) {
-      widget.controlsVisibilityController.reverse();
+      unawaited(widget.controlsVisibilityController.reverse());
     } else {
-      widget.controlsVisibilityController.forward();
+      unawaited(widget.controlsVisibilityController.forward());
     }
   }
 
@@ -785,15 +798,18 @@ class _InteractivePhotoPageState extends State<InteractivePhotoPage> {
         ..scaleByDouble(widget.maxScale, widget.maxScale, 1, 1);
       widget.onScaleChanged?.call(widget.maxScale);
     }
-    animation = Matrix4Tween(
-      begin: widget.transformationController.value,
-      end: end,
-    ).animate(
-      CurveTween(curve: Curves.easeOut).animate(widget.animationController),
+    animation =
+        Matrix4Tween(
+          begin: widget.transformationController.value,
+          end: end,
+        ).animate(
+          CurveTween(curve: Curves.easeOut).animate(widget.animationController),
+        );
+    unawaited(
+      widget.animationController.forward(from: 0).whenComplete(() {
+        onScaleChanged(isZoomed ? widget.minScale : widget.maxScale);
+      }),
     );
-    widget.animationController.forward(from: 0).whenComplete(() {
-      onScaleChanged(isZoomed ? widget.minScale : widget.maxScale);
-    });
   }
 
   void onDismiss() {
@@ -826,7 +842,7 @@ class _InteractivePhotoPageState extends State<InteractivePhotoPage> {
         },
         child: InteractiveViewer(
           onInteractionStart: (details) {
-            widget.controlsVisibilityController.reverse();
+            unawaited(widget.controlsVisibilityController.reverse());
             if (details.pointerCount >= 2) {
               widget.onScaleChanged?.call(widget.maxScale);
             }
